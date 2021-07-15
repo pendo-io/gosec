@@ -1,6 +1,7 @@
 package gosec_test
 
 import (
+	"go/ast"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -8,11 +9,12 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/securego/gosec"
+	"github.com/securego/gosec/v2"
+	"github.com/securego/gosec/v2/testutils"
 )
 
 var _ = Describe("Helpers", func() {
-	Context("when listing pacakge paths", func() {
+	Context("when listing package paths", func() {
 		var dir string
 		JustBeforeEach(func() {
 			var err error
@@ -89,6 +91,206 @@ var _ = Describe("Helpers", func() {
 			Expect(len(r)).Should(Equal(0))
 			r = gosec.ExcludedDirsRegExp([]string{})
 			Expect(len(r)).Should(Equal(0))
+		})
+	})
+
+	Context("when getting call info", func() {
+		It("should return the type and call name for selector expression", func() {
+			pkg := testutils.NewTestPackage()
+			defer pkg.Close()
+			pkg.AddFile("main.go", `
+			package main
+
+			import(
+			    "bytes"
+			)
+
+			func main() {
+			    b := new(bytes.Buffer)
+				_, err := b.WriteString("test")
+				if err != nil {
+				    panic(err)
+				}
+			}
+			`)
+			ctx := pkg.CreateContext("main.go")
+			result := map[string]string{}
+			visitor := testutils.NewMockVisitor()
+			visitor.Context = ctx
+			visitor.Callback = func(n ast.Node, ctx *gosec.Context) bool {
+				typeName, call, err := gosec.GetCallInfo(n, ctx)
+				if err == nil {
+					result[typeName] = call
+				}
+				return true
+			}
+			ast.Walk(visitor, ctx.Root)
+
+			Expect(result).Should(HaveKeyWithValue("*bytes.Buffer", "WriteString"))
+		})
+
+		It("should return the type and call name for new selector expression", func() {
+			pkg := testutils.NewTestPackage()
+			defer pkg.Close()
+			pkg.AddFile("main.go", `
+			package main
+
+			import(
+			    "bytes"
+			)
+
+			func main() {
+				_, err := new(bytes.Buffer).WriteString("test")
+				if err != nil {
+				    panic(err)
+				}
+			}
+			`)
+			ctx := pkg.CreateContext("main.go")
+			result := map[string]string{}
+			visitor := testutils.NewMockVisitor()
+			visitor.Context = ctx
+			visitor.Callback = func(n ast.Node, ctx *gosec.Context) bool {
+				typeName, call, err := gosec.GetCallInfo(n, ctx)
+				if err == nil {
+					result[typeName] = call
+				}
+				return true
+			}
+			ast.Walk(visitor, ctx.Root)
+
+			Expect(result).Should(HaveKeyWithValue("bytes.Buffer", "WriteString"))
+		})
+
+		It("should return the type and call name for function selector expression", func() {
+			pkg := testutils.NewTestPackage()
+			defer pkg.Close()
+			pkg.AddFile("main.go", `
+			package main
+
+			import(
+			    "bytes"
+			)
+
+			func createBuffer() *bytes.Buffer {
+			    return new(bytes.Buffer)
+			}
+
+			func main() {
+				_, err := createBuffer().WriteString("test")
+				if err != nil {
+				    panic(err)
+				}
+			}
+			`)
+			ctx := pkg.CreateContext("main.go")
+			result := map[string]string{}
+			visitor := testutils.NewMockVisitor()
+			visitor.Context = ctx
+			visitor.Callback = func(n ast.Node, ctx *gosec.Context) bool {
+				typeName, call, err := gosec.GetCallInfo(n, ctx)
+				if err == nil {
+					result[typeName] = call
+				}
+				return true
+			}
+			ast.Walk(visitor, ctx.Root)
+
+			Expect(result).Should(HaveKeyWithValue("*bytes.Buffer", "WriteString"))
+		})
+
+		It("should return the type and call name for package function", func() {
+			pkg := testutils.NewTestPackage()
+			defer pkg.Close()
+			pkg.AddFile("main.go", `
+			package main
+
+			import(
+			    "fmt"
+			)
+
+			func main() {
+			    fmt.Println("test")
+			}
+			`)
+			ctx := pkg.CreateContext("main.go")
+			result := map[string]string{}
+			visitor := testutils.NewMockVisitor()
+			visitor.Context = ctx
+			visitor.Callback = func(n ast.Node, ctx *gosec.Context) bool {
+				typeName, call, err := gosec.GetCallInfo(n, ctx)
+				if err == nil {
+					result[typeName] = call
+				}
+				return true
+			}
+			ast.Walk(visitor, ctx.Root)
+
+			Expect(result).Should(HaveKeyWithValue("fmt", "Println"))
+		})
+	})
+	Context("when getting binary expression operands", func() {
+		It("should return all operands of a binary expression", func() {
+			pkg := testutils.NewTestPackage()
+			defer pkg.Close()
+			pkg.AddFile("main.go", `
+			package main
+
+			import(
+			    "fmt"
+			)
+
+			func main() {
+				be := "test1" + "test2"
+				fmt.Println(be)
+			}
+			`)
+			ctx := pkg.CreateContext("main.go")
+			var be *ast.BinaryExpr
+			visitor := testutils.NewMockVisitor()
+			visitor.Context = ctx
+			visitor.Callback = func(n ast.Node, ctx *gosec.Context) bool {
+				if expr, ok := n.(*ast.BinaryExpr); ok {
+					be = expr
+				}
+				return true
+			}
+			ast.Walk(visitor, ctx.Root)
+
+			operands := gosec.GetBinaryExprOperands(be)
+			Expect(len(operands)).Should(Equal(2))
+		})
+		It("should return all operands of complex binary expression", func() {
+			pkg := testutils.NewTestPackage()
+			defer pkg.Close()
+			pkg.AddFile("main.go", `
+			package main
+
+			import(
+			    "fmt"
+			)
+
+			func main() {
+				be := "test1" + "test2" + "test3" + "test4"
+				fmt.Println(be)
+			}
+			`)
+			ctx := pkg.CreateContext("main.go")
+			var be *ast.BinaryExpr
+			visitor := testutils.NewMockVisitor()
+			visitor.Context = ctx
+			visitor.Callback = func(n ast.Node, ctx *gosec.Context) bool {
+				if expr, ok := n.(*ast.BinaryExpr); ok {
+					if be == nil {
+						be = expr
+					}
+				}
+				return true
+			}
+			ast.Walk(visitor, ctx.Root)
+
+			operands := gosec.GetBinaryExprOperands(be)
+			Expect(len(operands)).Should(Equal(4))
 		})
 	})
 })

@@ -23,9 +23,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/securego/gosec"
-	"github.com/securego/gosec/output"
-	"github.com/securego/gosec/rules"
+	"github.com/securego/gosec/v2"
+	"github.com/securego/gosec/v2/report"
+	"github.com/securego/gosec/v2/rules"
 )
 
 const (
@@ -73,7 +73,7 @@ var (
 	flagIgnoreNoSec = flag.Bool("nosec", false, "Ignores #nosec comments when set")
 
 	// format output
-	flagFormat = flag.String("fmt", "text", "Set output format. Valid options are: json, yaml, csv, junit-xml, html, sonarqube, or text")
+	flagFormat = flag.String("fmt", "text", "Set output format. Valid options are: json, yaml, csv, junit-xml, html, sonarqube, golint, sarif or text")
 
 	// #nosec alternative tag
 	flagAlternativeNoSec = flag.String("nosec-tag", "", "Set an alternative string for #nosec. Some examples: #dontanalyze, #falsepositive")
@@ -117,6 +117,15 @@ var (
 	// print version and quit with exit code 0
 	flagVersion = flag.Bool("version", false, "Print version and quit with exit code 0")
 
+	// stdout the results as well as write it in the output file
+	flagStdOut = flag.Bool("stdout", false, "Stdout the results as well as write it in the output file")
+
+	// print the text report with color, this is enabled by default
+	flagColor = flag.Bool("color", true, "Prints the text format report with colorization when it goes in the stdout")
+
+	// overrides the output format when stdout the results while saving them in the output file
+	flagVerbose = flag.String("verbose", "", "Overrides the output format when stdout the results while saving them in the output file.\nValid options are: json, yaml, csv, junit-xml, html, sonarqube, golint, sarif or text")
+
 	// exlude the folders from scan
 	flagDirsExclude arrayFlags
 
@@ -153,7 +162,7 @@ func loadConfig(configFile string) (gosec.Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer file.Close()
+		defer file.Close() // #nosec G307
 		if _, err := config.ReadFrom(file); err != nil {
 			return nil, err
 		}
@@ -187,30 +196,44 @@ func loadRules(include, exclude string) rules.RuleList {
 	return rules.Generate(filters...)
 }
 
-func saveOutput(filename, format string, paths []string, issues []*gosec.Issue, metrics *gosec.Metrics, errors map[string][]gosec.Error) error {
+func getRootPaths(paths []string) []string {
 	rootPaths := []string{}
 	for _, path := range paths {
 		rootPath, err := gosec.RootPath(path)
 		if err != nil {
-			return fmt.Errorf("failed to get the root path of the projects: %s", err)
+			logger.Fatal(fmt.Errorf("failed to get the root path of the projects: %s", err))
 		}
 		rootPaths = append(rootPaths, rootPath)
 	}
-	if filename != "" {
-		outfile, err := os.Create(filename)
-		if err != nil {
-			return err
-		}
-		defer outfile.Close()
-		err = output.CreateReport(outfile, format, rootPaths, issues, metrics, errors)
-		if err != nil {
-			return err
-		}
-	} else {
-		err := output.CreateReport(os.Stdout, format, rootPaths, issues, metrics, errors)
-		if err != nil {
-			return err
-		}
+	return rootPaths
+}
+
+// If verbose is defined it overwrites the defined format
+// Otherwise the actual format is used
+func getPrintedFormat(format string, verbose string) string {
+	if verbose != "" {
+		return verbose
+	}
+	return format
+}
+
+func printReport(format string, color bool, rootPaths []string, reportInfo *gosec.ReportInfo) error {
+	err := report.CreateReport(os.Stdout, format, color, rootPaths, reportInfo)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func saveReport(filename, format string, rootPaths []string, reportInfo *gosec.ReportInfo) error {
+	outfile, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer outfile.Close() // #nosec G307
+	err = report.CreateReport(outfile, format, false, rootPaths, reportInfo)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -240,6 +263,9 @@ func filterIssues(issues []*gosec.Issue, severity gosec.Score, confidence gosec.
 }
 
 func main() {
+	// Makes sure some version information is set
+	prepareVersionInfo()
+
 	// Setup usage description
 	flag.Usage = usage
 
@@ -248,6 +274,10 @@ func main() {
 	err := flag.Set("exclude-dir", "vendor")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\nError: failed to exclude the %q directory from scan", "vendor")
+	}
+	err = flag.Set("exclude-dir", ".git")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\nError: failed to exclude the %q directory from scan", ".git")
 	}
 
 	// Parse command line arguments
@@ -350,8 +380,20 @@ func main() {
 	}
 
 	// Create output report
-	if err := saveOutput(*flagOutput, *flagFormat, flag.Args(), issues, metrics, errors); err != nil {
-		logger.Fatal(err)
+	rootPaths := getRootPaths(flag.Args())
+
+	reportInfo := gosec.NewReportInfo(issues, metrics, errors).WithVersion(Version)
+
+	if *flagOutput == "" || *flagStdOut {
+		fileFormat := getPrintedFormat(*flagFormat, *flagVerbose)
+		if err := printReport(fileFormat, *flagColor, rootPaths, reportInfo); err != nil {
+			logger.Fatal((err))
+		}
+	}
+	if *flagOutput != "" {
+		if err := saveReport(*flagOutput, *flagFormat, rootPaths, reportInfo); err != nil {
+			logger.Fatal(err)
+		}
 	}
 
 	// Finalize logging

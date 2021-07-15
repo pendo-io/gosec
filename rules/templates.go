@@ -17,7 +17,7 @@ package rules
 import (
 	"go/ast"
 
-	"github.com/securego/gosec"
+	"github.com/securego/gosec/v2"
 )
 
 type templateCheck struct {
@@ -30,7 +30,7 @@ func (t *templateCheck) ID() string {
 }
 
 func (t *templateCheck) Match(n ast.Node, c *gosec.Context) (*gosec.Issue, error) {
-	if node := t.calls.ContainsCallExpr(n, c, false); node != nil {
+	if node := t.calls.ContainsPkgCallExpr(n, c, false); node != nil {
 		for _, arg := range node.Args {
 			if _, ok := arg.(*ast.BasicLit); !ok { // basic lits are safe
 				return gosec.NewIssue(c, n, t.ID(), t.What, t.Severity, t.Confidence), nil
@@ -43,7 +43,6 @@ func (t *templateCheck) Match(n ast.Node, c *gosec.Context) (*gosec.Issue, error
 // NewTemplateCheck constructs the template check rule. This rule is used to
 // find use of templates where HTML/JS escaping is not being used
 func NewTemplateCheck(id string, conf gosec.Config) (gosec.Rule, []ast.Node) {
-
 	calls := gosec.NewCallList()
 	calls.Add("html/template", "HTML")
 	calls.Add("html/template", "HTMLAttr")

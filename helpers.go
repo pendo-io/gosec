@@ -37,7 +37,6 @@ import (
 // 	node, matched := MatchCallByPackage(n, ctx, "math/rand", "Read")
 //
 func MatchCallByPackage(n ast.Node, c *Context, pkg string, names ...string) (*ast.CallExpr, bool) {
-
 	importedName, found := GetImportedName(pkg, c)
 	if !found {
 		return nil, false
@@ -135,11 +134,47 @@ func GetCallInfo(n ast.Node, ctx *Context) (string, string, error) {
 					return "undefined", fn.Sel.Name, fmt.Errorf("missing type info")
 				}
 				return expr.Name, fn.Sel.Name, nil
+			case *ast.SelectorExpr:
+				if expr.Sel != nil {
+					t := ctx.Info.TypeOf(expr.Sel)
+					if t != nil {
+						return t.String(), fn.Sel.Name, nil
+					}
+					return "undefined", fn.Sel.Name, fmt.Errorf("missing type info")
+				}
+			case *ast.CallExpr:
+				switch call := expr.Fun.(type) {
+				case *ast.Ident:
+					if call.Name == "new" {
+						t := ctx.Info.TypeOf(expr.Args[0])
+						if t != nil {
+							return t.String(), fn.Sel.Name, nil
+						}
+						return "undefined", fn.Sel.Name, fmt.Errorf("missing type info")
+					}
+					if call.Obj != nil {
+						switch decl := call.Obj.Decl.(type) {
+						case *ast.FuncDecl:
+							ret := decl.Type.Results
+							if ret != nil && len(ret.List) > 0 {
+								ret1 := ret.List[0]
+								if ret1 != nil {
+									t := ctx.Info.TypeOf(ret1.Type)
+									if t != nil {
+										return t.String(), fn.Sel.Name, nil
+									}
+									return "undefined", fn.Sel.Name, fmt.Errorf("missing type info")
+								}
+							}
+						}
+					}
+				}
 			}
 		case *ast.Ident:
 			return ctx.Pkg.Name(), fn.Name, nil
 		}
 	}
+
 	return "", "", fmt.Errorf("unable to determine call info")
 }
 
@@ -184,9 +219,29 @@ func GetIdentStringValues(ident *ast.Ident) []string {
 				}
 			}
 		}
-
 	}
 	return values
+}
+
+// GetBinaryExprOperands returns all operands of a binary expression by traversing
+// the expression tree
+func GetBinaryExprOperands(be *ast.BinaryExpr) []ast.Node {
+	var traverse func(be *ast.BinaryExpr)
+	result := []ast.Node{}
+	traverse = func(be *ast.BinaryExpr) {
+		if lhs, ok := be.X.(*ast.BinaryExpr); ok {
+			traverse(lhs)
+		} else {
+			result = append(result, be.X)
+		}
+		if rhs, ok := be.Y.(*ast.BinaryExpr); ok {
+			traverse(rhs)
+		} else {
+			result = append(result, be.Y)
+		}
+	}
+	traverse(be)
+	return result
 }
 
 // GetImportedName returns the name used for the package within the
@@ -241,7 +296,7 @@ func Gopath() []string {
 }
 
 // Getenv returns the values of the environment variable, otherwise
-//returns the default if variable is not set
+// returns the default if variable is not set
 func Getenv(key, userDefault string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
@@ -391,8 +446,6 @@ func ExcludedDirsRegExp(excludedDirs []string) []*regexp.Regexp {
 
 // RootPath returns the absolute root path of a scan
 func RootPath(root string) (string, error) {
-	if strings.HasSuffix(root, "...") {
-		root = root[0 : len(root)-3]
-	}
+	root = strings.TrimSuffix(root, "...")
 	return filepath.Abs(root)
 }

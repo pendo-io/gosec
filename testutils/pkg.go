@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/securego/gosec"
+	"github.com/securego/gosec/v2"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -23,7 +23,7 @@ type buildObj struct {
 type TestPackage struct {
 	Path   string
 	Files  map[string]string
-	ondisk bool
+	onDisk bool
 	build  *buildObj
 }
 
@@ -38,7 +38,7 @@ func NewTestPackage() *TestPackage {
 	return &TestPackage{
 		Path:   workingDir,
 		Files:  make(map[string]string),
-		ondisk: false,
+		onDisk: false,
 		build:  nil,
 	}
 }
@@ -49,15 +49,15 @@ func (p *TestPackage) AddFile(filename, content string) {
 }
 
 func (p *TestPackage) write() error {
-	if p.ondisk {
+	if p.onDisk {
 		return nil
 	}
 	for filename, content := range p.Files {
 		if e := ioutil.WriteFile(filename, []byte(content), 0644); e != nil {
 			return e
-		}
+		} // #nosec G306
 	}
-	p.ondisk = true
+	p.onDisk = true
 	return nil
 }
 
@@ -109,12 +109,13 @@ func (p *TestPackage) CreateContext(filename string) *gosec.Context {
 			pkgFile = strings.TrimPrefix(pkgFile, strip)
 			if pkgFile == filename {
 				ctx := &gosec.Context{
-					FileSet: pkg.Fset,
-					Root:    file,
-					Config:  gosec.NewConfig(),
-					Info:    pkg.TypesInfo,
-					Pkg:     pkg.Types,
-					Imports: gosec.NewImportTracker(),
+					FileSet:      pkg.Fset,
+					Root:         file,
+					Config:       gosec.NewConfig(),
+					Info:         pkg.TypesInfo,
+					Pkg:          pkg.Types,
+					Imports:      gosec.NewImportTracker(),
+					PassedValues: make(map[string]interface{}),
 				}
 				ctx.Imports.TrackPackages(ctx.Pkg.Imports()...)
 				return ctx
@@ -126,7 +127,7 @@ func (p *TestPackage) CreateContext(filename string) *gosec.Context {
 
 // Close will delete the package and all files in that directory
 func (p *TestPackage) Close() {
-	if p.ondisk {
+	if p.onDisk {
 		err := os.RemoveAll(p.Path)
 		if err != nil {
 			log.Fatal(err)
@@ -140,4 +141,9 @@ func (p *TestPackage) Pkgs() []*packages.Package {
 		return p.build.pkgs
 	}
 	return []*packages.Package{}
+}
+
+// PrintErrors prints to os.Stderr the accumulated errors of built packages
+func (p *TestPackage) PrintErrors() int {
+	return packages.PrintErrors(p.Pkgs())
 }

@@ -14,7 +14,7 @@
 
 package rules
 
-import "github.com/securego/gosec"
+import "github.com/securego/gosec/v2"
 
 // RuleDefinition contains the description of a rule and a mechanism to
 // create it.
@@ -66,6 +66,8 @@ func Generate(filters ...RuleFilter) RuleList {
 		{"G106", "Audit the use of ssh.InsecureIgnoreHostKey function", NewSSHHostKey},
 		{"G107", "Url provided to HTTP request as taint input", NewSSRFCheck},
 		{"G108", "Profiling endpoint is automatically exposed", NewPprofCheck},
+		{"G109", "Converting strconv.Atoi result to int32/int16", NewIntegerOverflowCheck},
+		{"G110", "Detect io.Copy instead of io.CopyN when decompression", NewDecompressionBombCheck},
 
 		// injection
 		{"G201", "SQL query construction using format string", NewSQLStrFormat},
@@ -79,6 +81,8 @@ func Generate(filters ...RuleFilter) RuleList {
 		{"G303", "Creating tempfile using a predictable path", NewBadTempFile},
 		{"G304", "File path provided as taint input", NewReadFile},
 		{"G305", "File path traversal when extracting zip archive", NewArchive},
+		{"G306", "Poor file permissions used when writing to a file", NewWritePerms},
+		{"G307", "Unsafe defer call of a method returning an error", NewDeferredClosing},
 
 		// crypto
 		{"G401", "Detect the usage of DES, RC4, MD5 or SHA1", NewUsesWeakCryptography},
@@ -86,12 +90,15 @@ func Generate(filters ...RuleFilter) RuleList {
 		{"G403", "Ensure minimum RSA key length of 2048 bits", NewWeakKeyStrength},
 		{"G404", "Insecure random number source (rand)", NewWeakRandCheck},
 
-		// blacklist
-		{"G501", "Import blacklist: crypto/md5", NewBlacklistedImportMD5},
-		{"G502", "Import blacklist: crypto/des", NewBlacklistedImportDES},
-		{"G503", "Import blacklist: crypto/rc4", NewBlacklistedImportRC4},
-		{"G504", "Import blacklist: net/http/cgi", NewBlacklistedImportCGI},
-		{"G505", "Import blacklist: crypto/sha1", NewBlacklistedImportSHA1},
+		// blocklist
+		{"G501", "Import blocklist: crypto/md5", NewBlocklistedImportMD5},
+		{"G502", "Import blocklist: crypto/des", NewBlocklistedImportDES},
+		{"G503", "Import blocklist: crypto/rc4", NewBlocklistedImportRC4},
+		{"G504", "Import blocklist: net/http/cgi", NewBlocklistedImportCGI},
+		{"G505", "Import blocklist: crypto/sha1", NewBlocklistedImportSHA1},
+
+		// memory safety
+		{"G601", "Implicit memory aliasing in RangeStmt", NewImplicitAliasing},
 	}
 
 	ruleMap := make(map[string]RuleDefinition)

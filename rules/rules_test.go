@@ -7,13 +7,12 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/securego/gosec"
-	"github.com/securego/gosec/rules"
-	"github.com/securego/gosec/testutils"
+	"github.com/securego/gosec/v2"
+	"github.com/securego/gosec/v2/rules"
+	"github.com/securego/gosec/v2/testutils"
 )
 
 var _ = Describe("gosec rules", func() {
-
 	var (
 		logger    *log.Logger
 		config    gosec.Config
@@ -39,6 +38,7 @@ var _ = Describe("gosec rules", func() {
 				}
 				err := pkg.Build()
 				Expect(err).ShouldNot(HaveOccurred())
+				Expect(pkg.PrintErrors()).Should(BeZero())
 				err = analyzer.Process(buildTags, pkg.Path)
 				Expect(err).ShouldNot(HaveOccurred())
 				issues, _, _ := analyzer.Report()
@@ -83,6 +83,14 @@ var _ = Describe("gosec rules", func() {
 			runner("G108", testutils.SampleCodeG108)
 		})
 
+		It("should detect integer overflow", func() {
+			runner("G109", testutils.SampleCodeG109)
+		})
+
+		It("should detect DoS vulnerability via decompression bomb", func() {
+			runner("G110", testutils.SampleCodeG110)
+		})
+
 		It("should detect sql injection via format strings", func() {
 			runner("G201", testutils.SampleCodeG201)
 		})
@@ -119,6 +127,14 @@ var _ = Describe("gosec rules", func() {
 			runner("G305", testutils.SampleCodeG305)
 		})
 
+		It("should detect poor permissions when writing to a file", func() {
+			runner("G306", testutils.SampleCodeG306)
+		})
+
+		It("should detect unsafe defer of os.Close", func() {
+			runner("G307", testutils.SampleCodeG307)
+		})
+
 		It("should detect weak crypto algorithms", func() {
 			runner("G401", testutils.SampleCodeG401)
 		})
@@ -139,25 +155,28 @@ var _ = Describe("gosec rules", func() {
 			runner("G404", testutils.SampleCodeG404)
 		})
 
-		It("should detect blacklisted imports - MD5", func() {
+		It("should detect blocklisted imports - MD5", func() {
 			runner("G501", testutils.SampleCodeG501)
 		})
 
-		It("should detect blacklisted imports - DES", func() {
+		It("should detect blocklisted imports - DES", func() {
 			runner("G502", testutils.SampleCodeG502)
 		})
 
-		It("should detect blacklisted imports - RC4", func() {
+		It("should detect blocklisted imports - RC4", func() {
 			runner("G503", testutils.SampleCodeG503)
 		})
 
-		It("should detect blacklisted imports - CGI (httpoxy)", func() {
+		It("should detect blocklisted imports - CGI (httpoxy)", func() {
 			runner("G504", testutils.SampleCodeG504)
 		})
-		It("should detect blacklisted imports - SHA1", func() {
+
+		It("should detect blocklisted imports - SHA1", func() {
 			runner("G505", testutils.SampleCodeG505)
 		})
 
+		It("should detect implicit aliasing in ForRange", func() {
+			runner("G601", testutils.SampleCodeG601)
+		})
 	})
-
 })

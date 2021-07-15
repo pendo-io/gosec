@@ -7,17 +7,16 @@ import (
 	"os"
 	"strings"
 
-	"github.com/securego/gosec"
-	"github.com/securego/gosec/rules"
+	"github.com/securego/gosec/v2"
+	"github.com/securego/gosec/v2/rules"
 	"golang.org/x/tools/go/packages"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/securego/gosec/testutils"
+	"github.com/securego/gosec/v2/testutils"
 )
 
 var _ = Describe("Analyzer", func() {
-
 	var (
 		analyzer  *gosec.Analyzer
 		logger    *log.Logger
@@ -30,7 +29,6 @@ var _ = Describe("Analyzer", func() {
 	})
 
 	Context("when processing a package", func() {
-
 		It("should not report an error if the package contains no Go files", func() {
 			analyzer.LoadRules(rules.Generate().Builders())
 			dir, err := ioutil.TempDir("", "empty")
@@ -118,7 +116,6 @@ var _ = Describe("Analyzer", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			controlIssues, _, _ := analyzer.Report()
 			Expect(controlIssues).Should(HaveLen(sample.Errors))
-
 		})
 
 		It("should report Go build errors and invalid files", func() {
@@ -215,7 +212,7 @@ var _ = Describe("Analyzer", func() {
 		})
 
 		It("should pass the build tags", func() {
-			sample := testutils.SampleCode601[0]
+			sample := testutils.SampleCodeBuildTag[0]
 			source := sample.Code[0]
 			analyzer.LoadRules(rules.Generate().Builders())
 			pkg := testutils.NewTestPackage()
@@ -262,10 +259,9 @@ var _ = Describe("Analyzer", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			nosecIssues, _, _ := customAnalyzer.Report()
 			Expect(nosecIssues).Should(HaveLen(sample.Errors))
-
 		})
 
-		It("should be possible to change the default #nosec directive to another one", func() {
+		It("should be possible to use an alternative nosec tag", func() {
 			// Rule for MD5 weak crypto usage
 			sample := testutils.SampleCodeG401[0]
 			source := sample.Code[0]
@@ -286,10 +282,9 @@ var _ = Describe("Analyzer", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			nosecIssues, _, _ := customAnalyzer.Report()
 			Expect(nosecIssues).Should(HaveLen(0))
-
 		})
 
-		It("should not ignore vulnerabilities", func() {
+		It("should ignore vulnerabilities when the default tag is found", func() {
 			// Rule for MD5 weak crypto usage
 			sample := testutils.SampleCodeG401[0]
 			source := sample.Code[0]
@@ -309,8 +304,7 @@ var _ = Describe("Analyzer", func() {
 			err = customAnalyzer.Process(buildTags, nosecPackage.Path)
 			Expect(err).ShouldNot(HaveOccurred())
 			nosecIssues, _, _ := customAnalyzer.Report()
-			Expect(nosecIssues).Should(HaveLen(sample.Errors))
-
+			Expect(nosecIssues).Should(HaveLen(0))
 		})
 
 		It("should be able to analyze Go test package", func() {
@@ -339,9 +333,23 @@ var _ = Describe("Analyzer", func() {
 			Expect(issues).Should(HaveLen(1))
 		})
 	})
+	It("should be able to analyze Cgo files", func() {
+		analyzer.LoadRules(rules.Generate().Builders())
+		sample := testutils.SampleCodeCgo[0]
+		source := sample.Code[0]
+
+		testPackage := testutils.NewTestPackage()
+		defer testPackage.Close()
+		testPackage.AddFile("main.go", source)
+		err := testPackage.Build()
+		Expect(err).ShouldNot(HaveOccurred())
+		err = analyzer.Process(buildTags, testPackage.Path)
+		Expect(err).ShouldNot(HaveOccurred())
+		issues, _, _ := analyzer.Report()
+		Expect(issues).Should(HaveLen(0))
+	})
 
 	Context("when parsing errors from a package", func() {
-
 		It("should return no error when the error list is empty", func() {
 			pkg := &packages.Package{}
 			err := analyzer.ParseErrors(pkg)
@@ -351,7 +359,7 @@ var _ = Describe("Analyzer", func() {
 		It("should properly parse the errors", func() {
 			pkg := &packages.Package{
 				Errors: []packages.Error{
-					packages.Error{
+					{
 						Pos: "file:1:2",
 						Msg: "build error",
 					},
@@ -372,7 +380,7 @@ var _ = Describe("Analyzer", func() {
 		It("should properly parse the errors without line and column", func() {
 			pkg := &packages.Package{
 				Errors: []packages.Error{
-					packages.Error{
+					{
 						Pos: "file",
 						Msg: "build error",
 					},
@@ -393,7 +401,7 @@ var _ = Describe("Analyzer", func() {
 		It("should properly parse the errors without column", func() {
 			pkg := &packages.Package{
 				Errors: []packages.Error{
-					packages.Error{
+					{
 						Pos: "file",
 						Msg: "build error",
 					},
@@ -414,7 +422,7 @@ var _ = Describe("Analyzer", func() {
 		It("should return error when line cannot be parsed", func() {
 			pkg := &packages.Package{
 				Errors: []packages.Error{
-					packages.Error{
+					{
 						Pos: "file:line",
 						Msg: "build error",
 					},
@@ -427,7 +435,7 @@ var _ = Describe("Analyzer", func() {
 		It("should return error when column cannot be parsed", func() {
 			pkg := &packages.Package{
 				Errors: []packages.Error{
-					packages.Error{
+					{
 						Pos: "file:1:column",
 						Msg: "build error",
 					},
@@ -440,11 +448,11 @@ var _ = Describe("Analyzer", func() {
 		It("should append  error to the same file", func() {
 			pkg := &packages.Package{
 				Errors: []packages.Error{
-					packages.Error{
+					{
 						Pos: "file:1:2",
 						Msg: "error1",
 					},
-					packages.Error{
+					{
 						Pos: "file:3:4",
 						Msg: "error2",
 					},
@@ -492,7 +500,7 @@ var _ = Describe("Analyzer", func() {
 		It("should add a new error", func() {
 			pkg := &packages.Package{
 				Errors: []packages.Error{
-					packages.Error{
+					{
 						Pos: "file:1:2",
 						Msg: "build error",
 					},

@@ -18,7 +18,7 @@ import (
 	"go/ast"
 	"regexp"
 
-	"github.com/securego/gosec"
+	"github.com/securego/gosec/v2"
 )
 
 // Looks for net.Listen("0.0.0.0") or net.Listen(":8080")
@@ -33,7 +33,7 @@ func (r *bindsToAllNetworkInterfaces) ID() string {
 }
 
 func (r *bindsToAllNetworkInterfaces) Match(n ast.Node, c *gosec.Context) (*gosec.Issue, error) {
-	callExpr := r.calls.ContainsCallExpr(n, c, false)
+	callExpr := r.calls.ContainsPkgCallExpr(n, c, false)
 	if callExpr == nil {
 		return nil, nil
 	}

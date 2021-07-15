@@ -24,10 +24,10 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strconv"
-
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -47,15 +47,16 @@ const LoadMode = packages.NeedName |
 // It is passed through to all rule functions as they are called. Rules may use
 // this data in conjunction withe the encountered AST node.
 type Context struct {
-	FileSet  *token.FileSet
-	Comments ast.CommentMap
-	Info     *types.Info
-	Pkg      *types.Package
-	PkgFiles []*ast.File
-	Root     *ast.File
-	Config   Config
-	Imports  *ImportTracker
-	Ignores  []map[string]bool
+	FileSet      *token.FileSet
+	Comments     ast.CommentMap
+	Info         *types.Info
+	Pkg          *types.Package
+	PkgFiles     []*ast.File
+	Root         *ast.File
+	Config       Config
+	Imports      *ImportTracker
+	Ignores      []map[string]bool
+	PassedValues map[string]interface{}
 }
 
 // Metrics used when reporting information about a scanning run.
@@ -123,7 +124,12 @@ func (gosec *Analyzer) LoadRules(ruleDefinitions map[string]RuleBuilder) {
 
 // Process kicks off the analysis process for a given package
 func (gosec *Analyzer) Process(buildTags []string, packagePaths ...string) error {
-	config := gosec.pkgConfig(buildTags)
+	config := &packages.Config{
+		Mode:       LoadMode,
+		BuildFlags: buildTags,
+		Tests:      gosec.tests,
+	}
+
 	for _, pkgPath := range packagePaths {
 		pkgs, err := gosec.load(pkgPath, config)
 		if err != nil {
@@ -143,19 +149,6 @@ func (gosec *Analyzer) Process(buildTags []string, packagePaths ...string) error
 	return nil
 }
 
-func (gosec *Analyzer) pkgConfig(buildTags []string) *packages.Config {
-	flags := []string{}
-	if len(buildTags) > 0 {
-		tagsFlag := "-tags=" + strings.Join(buildTags, " ")
-		flags = append(flags, tagsFlag)
-	}
-	return &packages.Config{
-		Mode:       LoadMode,
-		BuildFlags: flags,
-		Tests:      gosec.tests,
-	}
-}
-
 func (gosec *Analyzer) load(pkgPath string, conf *packages.Config) ([]*packages.Package, error) {
 	abspath, err := GetPkgAbsPath(pkgPath)
 	if err != nil {
@@ -164,13 +157,20 @@ func (gosec *Analyzer) load(pkgPath string, conf *packages.Config) ([]*packages.
 	}
 
 	gosec.logger.Println("Import directory:", abspath)
-	basePackage, err := build.Default.ImportDir(pkgPath, build.ImportComment)
+	// step 1/3 create build context.
+	buildD := build.Default
+	// step 2/3: add build tags to get env dependent files into basePackage.
+	buildD.BuildTags = conf.BuildFlags
+	basePackage, err := buildD.ImportDir(pkgPath, build.ImportComment)
 	if err != nil {
 		return []*packages.Package{}, fmt.Errorf("importing dir %q: %v", pkgPath, err)
 	}
 
 	var packageFiles []string
 	for _, filename := range basePackage.GoFiles {
+		packageFiles = append(packageFiles, path.Join(pkgPath, filename))
+	}
+	for _, filename := range basePackage.CgoFiles {
 		packageFiles = append(packageFiles, path.Join(pkgPath, filename))
 	}
 
@@ -183,6 +183,8 @@ func (gosec *Analyzer) load(pkgPath string, conf *packages.Config) ([]*packages.
 		}
 	}
 
+	// step 3/3 remove build tags from conf to proceed build correctly.
+	conf.BuildFlags = nil
 	pkgs, err := packages.Load(conf, packageFiles...)
 	if err != nil {
 		return []*packages.Package{}, fmt.Errorf("loading files from package %q: %v", pkgPath, err)
@@ -194,7 +196,13 @@ func (gosec *Analyzer) load(pkgPath string, conf *packages.Config) ([]*packages.
 func (gosec *Analyzer) Check(pkg *packages.Package) {
 	gosec.logger.Println("Checking package:", pkg.Name)
 	for _, file := range pkg.Syntax {
-		gosec.logger.Println("Checking file:", pkg.Fset.File(file.Pos()).Name())
+		checkedFile := pkg.Fset.File(file.Pos()).Name()
+		// Skip the no-Go file from analysis (e.g. a Cgo files is expanded in 3 different files
+		// stored in the cache which do not need to by analyzed)
+		if filepath.Ext(checkedFile) != ".go" {
+			continue
+		}
+		gosec.logger.Println("Checking file:", checkedFile)
 		gosec.context.FileSet = pkg.Fset
 		gosec.context.Config = gosec.config
 		gosec.context.Comments = ast.NewCommentMap(gosec.context.FileSet, file, file.Comments)
@@ -204,6 +212,7 @@ func (gosec *Analyzer) Check(pkg *packages.Package) {
 		gosec.context.PkgFiles = pkg.Syntax
 		gosec.context.Imports = NewImportTracker()
 		gosec.context.Imports.TrackFile(file)
+		gosec.context.PassedValues = make(map[string]interface{})
 		ast.Walk(gosec, file)
 		gosec.stats.NumFiles++
 		gosec.stats.NumLines += pkg.Fset.File(file.Pos()).LineCount()
@@ -259,18 +268,23 @@ func (gosec *Analyzer) AppendError(file string, err error) {
 	gosec.errors[file] = errors
 }
 
-// ignore a node (and sub-tree) if it is tagged with a "#nosec" comment
+// ignore a node (and sub-tree) if it is tagged with a nosec tag comment
 func (gosec *Analyzer) ignore(n ast.Node) ([]string, bool) {
 	if groups, ok := gosec.context.Comments[n]; ok && !gosec.ignoreNosec {
 
 		// Checks if an alternative for #nosec is set and, if not, uses the default.
-		noSecAlternative, err := gosec.config.GetGlobal(NoSecAlternative)
+		noSecDefaultTag := "#nosec"
+		noSecAlternativeTag, err := gosec.config.GetGlobal(NoSecAlternative)
 		if err != nil {
-			noSecAlternative = "#nosec"
+			noSecAlternativeTag = noSecDefaultTag
 		}
 
 		for _, group := range groups {
-			if strings.Contains(group.Text(), noSecAlternative) {
+
+			foundDefaultTag := strings.Contains(group.Text(), noSecDefaultTag)
+			foundAlternativeTag := strings.Contains(group.Text(), noSecAlternativeTag)
+
+			if foundDefaultTag || foundAlternativeTag {
 				gosec.stats.NumNosec++
 
 				// Pull out the specific rules that are listed to be ignored.

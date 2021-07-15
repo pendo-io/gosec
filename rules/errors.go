@@ -18,7 +18,7 @@ import (
 	"go/ast"
 	"go/types"
 
-	"github.com/securego/gosec"
+	"github.com/securego/gosec/v2"
 )
 
 type noErrorCheck struct {
@@ -55,7 +55,7 @@ func (r *noErrorCheck) Match(n ast.Node, ctx *gosec.Context) (*gosec.Issue, erro
 		cfg := ctx.Config
 		if enabled, err := cfg.IsGlobalEnabled(gosec.Audit); err == nil && enabled {
 			for _, expr := range stmt.Rhs {
-				if callExpr, ok := expr.(*ast.CallExpr); ok && r.whitelist.ContainsCallExpr(expr, ctx, false) == nil {
+				if callExpr, ok := expr.(*ast.CallExpr); ok && r.whitelist.ContainsCallExpr(expr, ctx) == nil {
 					pos := returnsError(callExpr, ctx)
 					if pos < 0 || pos >= len(stmt.Lhs) {
 						return nil, nil
@@ -67,7 +67,7 @@ func (r *noErrorCheck) Match(n ast.Node, ctx *gosec.Context) (*gosec.Issue, erro
 			}
 		}
 	case *ast.ExprStmt:
-		if callExpr, ok := stmt.X.(*ast.CallExpr); ok && r.whitelist.ContainsCallExpr(stmt.X, ctx, false) == nil {
+		if callExpr, ok := stmt.X.(*ast.CallExpr); ok && r.whitelist.ContainsCallExpr(stmt.X, ctx) == nil {
 			pos := returnsError(callExpr, ctx)
 			if pos >= 0 {
 				return gosec.NewIssue(ctx, n, r.ID(), r.What, r.Severity, r.Confidence), nil
@@ -86,6 +86,7 @@ func NewNoErrorCheck(id string, conf gosec.Config) (gosec.Rule, []ast.Node) {
 	whitelist.AddAll("fmt", "Print", "Printf", "Println", "Fprint", "Fprintf", "Fprintln")
 	whitelist.AddAll("strings.Builder", "Write", "WriteByte", "WriteRune", "WriteString")
 	whitelist.Add("io.PipeWriter", "CloseWithError")
+	whitelist.Add("hash.Hash", "Write")
 
 	if configured, ok := conf["G104"]; ok {
 		if whitelisted, ok := configured.(map[string]interface{}); ok {

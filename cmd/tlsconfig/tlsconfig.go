@@ -97,6 +97,9 @@ func getGoCipherConfig(name string, sstls ServerSideTLSJson) (goCipherConfigurat
 		}
 		if len(cipherSuite.IANAName) > 0 {
 			cipherConf.Ciphers = append(cipherConf.Ciphers, cipherSuite.IANAName)
+			if len(cipherSuite.NSSName) > 0 && cipherSuite.NSSName != cipherSuite.IANAName {
+				cipherConf.Ciphers = append(cipherConf.Ciphers, cipherSuite.NSSName)
+			}
 		}
 	}
 
@@ -186,5 +189,5 @@ func main() {
 	outputPath := filepath.Join(dir, *outputFile)
 	if err := ioutil.WriteFile(outputPath, src, 0644); err != nil {
 		log.Fatalf("Writing output: %s", err)
-	}
+	} // #nosec G306
 }

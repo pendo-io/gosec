@@ -1,6 +1,6 @@
 package testutils
 
-import "github.com/securego/gosec"
+import "github.com/securego/gosec/v2"
 
 // CodeSample encapsulates a snippet of source code that compiles, and how many errors should be detected
 type CodeSample struct {
@@ -11,14 +11,16 @@ type CodeSample struct {
 
 var (
 	// SampleCodeG101 code snippets for hardcoded credentials
-	SampleCodeG101 = []CodeSample{{[]string{`
+	SampleCodeG101 = []CodeSample{
+		{[]string{`
 package main
 import "fmt"
 func main() {
 	username := "admin"
 	password := "f62e5bcda4fae4f82370da0c6f20697b8f8447ef"
 	fmt.Println("Doing something with: ", username, password)
-}`}, 1, gosec.NewConfig()}, {[]string{`
+}`}, 1, gosec.NewConfig()},
+		{[]string{`
 // Entropy check should not report this error by default
 package main
 import "fmt"
@@ -26,21 +28,24 @@ func main() {
 	username := "admin"
 	password := "secret"
 	fmt.Println("Doing something with: ", username, password)
-}`}, 0, gosec.NewConfig()}, {[]string{`
+}`}, 0, gosec.NewConfig()},
+		{[]string{`
 package main
 import "fmt"
 var password = "f62e5bcda4fae4f82370da0c6f20697b8f8447ef"
 func main() {
 	username := "admin"
 	fmt.Println("Doing something with: ", username, password)
-}`}, 1, gosec.NewConfig()}, {[]string{`
+}`}, 1, gosec.NewConfig()},
+		{[]string{`
 package main
 import "fmt"
 const password = "f62e5bcda4fae4f82370da0c6f20697b8f8447ef"
 func main() {
 	username := "admin"
 	fmt.Println("Doing something with: ", username, password)
-}`}, 1, gosec.NewConfig()}, {[]string{`
+}`}, 1, gosec.NewConfig()},
+		{[]string{`
 package main
 import "fmt"
 const (
@@ -49,12 +54,14 @@ const (
 )
 func main() {
 	fmt.Println("Doing something with: ", username, password)
-}`}, 1, gosec.NewConfig()}, {[]string{`
+}`}, 1, gosec.NewConfig()},
+		{[]string{`
 package main
 var password string
 func init() {
 	password = "f62e5bcda4fae4f82370da0c6f20697b8f8447ef"
-}`}, 1, gosec.NewConfig()}, {[]string{`
+}`}, 1, gosec.NewConfig()},
+		{[]string{`
 package main
 const (
 	ATNStateSomethingElse = 1
@@ -62,14 +69,43 @@ const (
 )
 func main() {
 	println(ATNStateTokenStart)
-}`}, 0, gosec.NewConfig()}, {[]string{`
+}`}, 0, gosec.NewConfig()},
+		{[]string{`
 package main
 const (
 	ATNStateTokenStart = "f62e5bcda4fae4f82370da0c6f20697b8f8447ef"
 )
 func main() {
 	println(ATNStateTokenStart)
-}`}, 1, gosec.NewConfig()}}
+}`}, 1, gosec.NewConfig()},
+		{[]string{`
+package main
+import "fmt"
+func main() {
+	var password string
+	if password == "f62e5bcda4fae4f82370da0c6f20697b8f8447ef" {
+		fmt.Println("password equality")
+	}
+}`}, 1, gosec.NewConfig()},
+		{[]string{`
+package main
+import "fmt"
+func main() {
+	var password string
+	if password != "f62e5bcda4fae4f82370da0c6f20697b8f8447ef" {
+		fmt.Println("password equality")
+	}
+}`}, 1, gosec.NewConfig()},
+		{[]string{`
+package main
+import "fmt"
+func main() {
+	var p string
+	if p != "f62e5bcda4fae4f82370da0c6f20697b8f8447ef" {
+		fmt.Println("password equality")
+	}
+}`}, 0, gosec.NewConfig()},
+	}
 
 	// SampleCodeG102 code snippets for network binding
 	SampleCodeG102 = []CodeSample{
@@ -174,7 +210,8 @@ func main() {
    	addressHolder := uintptr(unsafe.Pointer(intPtr)) + unsafe.Sizeof(intArray[0])
    	intPtr = (*int)(unsafe.Pointer(addressHolder))
    	fmt.Printf("\nintPtr=%p, *intPtr=%d.\n\n", intPtr, *intPtr)
-}`}, 3, gosec.NewConfig()}}
+}`}, 3, gosec.NewConfig()},
+	}
 
 	// SampleCodeG104 finds errors that aren't being handled
 	SampleCodeG104 = []CodeSample{
@@ -234,6 +271,23 @@ package main
 func dummy(){}
 `}, 0, gosec.NewConfig()}, {[]string{`
 package main
+
+import (
+	"bytes"
+)
+
+type a struct {
+	buf *bytes.Buffer
+}
+
+func main() {
+	a := &a{
+		buf: new(bytes.Buffer),
+	}
+	a.buf.Write([]byte{0})
+}
+`}, 0, gosec.NewConfig()}, {[]string{`
+package main
 import (
 	"io/ioutil"
 	"os"
@@ -245,7 +299,33 @@ func a() {
 }
 func main() {
 	a()
-}`}, 0, gosec.Config{"G104": map[string]interface{}{"io/ioutil": []interface{}{"WriteFile"}}}}}
+}`}, 0, gosec.Config{"G104": map[string]interface{}{"ioutil": []interface{}{"WriteFile"}}}}, {[]string{`
+package main
+
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+)
+
+func createBuffer() *bytes.Buffer {
+	return new(bytes.Buffer)
+}
+
+func main() {
+	new(bytes.Buffer).WriteString("*bytes.Buffer")
+	fmt.Fprintln(os.Stderr, "fmt")
+	new(strings.Builder).WriteString("*strings.Builder")
+	_, pw := io.Pipe()
+	pw.CloseWithError(io.EOF)
+
+	createBuffer().WriteString("*bytes.Buffer")
+	b := createBuffer()
+	b.WriteString("*bytes.Buffer")
+}`}, 0, gosec.NewConfig()},
+	} // it shoudn't return any errors because all method calls are whitelisted by default
 
 	// SampleCodeG104Audit finds errors that aren't being handled in audit mode
 	SampleCodeG104Audit = []CodeSample{
@@ -303,7 +383,8 @@ func main() {
 }`, `
 package main
 func dummy(){}
-`}, 0, gosec.Config{gosec.Globals: map[gosec.GlobalOption]string{gosec.Audit: "enabled"}}}}
+`}, 0, gosec.Config{gosec.Globals: map[gosec.GlobalOption]string{gosec.Audit: "enabled"}}},
+	}
 
 	// SampleCodeG106 - ssh InsecureIgnoreHostKey
 	SampleCodeG106 = []CodeSample{{[]string{`
@@ -453,7 +534,7 @@ func main() {
     }
     fmt.Println(resp.Status)
 }`}, 0, gosec.NewConfig()}, {[]string{`
-// An exported variable declared a packaged scope is not secure 
+// An exported variable declared a packaged scope is not secure
 // because it can changed at any time
 package main
 
@@ -513,7 +594,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/http/pprof"
 )
 
 func main() {
@@ -522,6 +602,211 @@ func main() {
 	})
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }`}, 0, gosec.NewConfig()}}
+
+	// SampleCodeG109 - Potential Integer OverFlow
+	SampleCodeG109 = []CodeSample{
+		{[]string{`
+package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func main() {
+	bigValue, err := strconv.Atoi("2147483648")
+	if err != nil {
+		panic(err)
+	}
+	value := int32(bigValue)
+	fmt.Println(value)
+}`}, 1, gosec.NewConfig()}, {[]string{`
+package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func main() {
+	bigValue, err := strconv.Atoi("32768")
+	if err != nil {
+		panic(err)
+	}
+	if int16(bigValue) < 0 {
+		fmt.Println(bigValue)
+	}
+}`}, 1, gosec.NewConfig()}, {[]string{`
+package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func main() {
+	bigValue, err := strconv.Atoi("2147483648")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(bigValue)
+}`}, 0, gosec.NewConfig()}, {[]string{`
+package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func main() {
+	bigValue, err := strconv.Atoi("2147483648")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(bigValue)
+	test()
+}
+
+func test() {
+	bigValue := 30
+	value := int32(bigValue)
+	fmt.Println(value)
+}`}, 0, gosec.NewConfig()}, {[]string{`
+package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func main() {
+	value := 10
+	if value == 10 {
+		value, _ := strconv.Atoi("2147483648")
+		fmt.Println(value)
+	}
+	v := int32(value)
+	fmt.Println(v)
+}`}, 0, gosec.NewConfig()},
+	}
+
+	// SampleCodeG110 - potential DoS vulnerability via decompression bomb
+	SampleCodeG110 = []CodeSample{
+		{[]string{`
+package main
+
+import (
+	"bytes"
+	"compress/zlib"
+	"io"
+	"os"
+)
+
+func main() {
+	buff := []byte{120, 156, 202, 72, 205, 201, 201, 215, 81, 40, 207,
+		47, 202, 73, 225, 2, 4, 0, 0, 255, 255, 33, 231, 4, 147}
+	b := bytes.NewReader(buff)
+
+	r, err := zlib.NewReader(b)
+	if err != nil {
+		panic(err)
+	}
+	_, err = io.Copy(os.Stdout, r)
+	if err != nil {
+		panic(err)
+	}
+
+	r.Close()
+}`}, 1, gosec.NewConfig()}, {[]string{`
+package main
+
+import (
+	"bytes"
+	"compress/zlib"
+	"io"
+	"os"
+)
+
+func main() {
+	buff := []byte{120, 156, 202, 72, 205, 201, 201, 215, 81, 40, 207,
+		47, 202, 73, 225, 2, 4, 0, 0, 255, 255, 33, 231, 4, 147}
+	b := bytes.NewReader(buff)
+
+	r, err := zlib.NewReader(b)
+	if err != nil {
+		panic(err)
+	}
+	buf := make([]byte, 8)
+	_, err = io.CopyBuffer(os.Stdout, r, buf)
+	if err != nil {
+		panic(err)
+	}
+	r.Close()
+}`}, 1, gosec.NewConfig()}, {[]string{`
+package main
+
+import (
+	"archive/zip"
+	"io"
+	"os"
+	"strconv"
+)
+
+func main() {
+	r, err := zip.OpenReader("tmp.zip")
+	if err != nil {
+		panic(err)
+	}
+	defer r.Close()
+
+	for i, f := range r.File {
+		out, err := os.OpenFile("output" + strconv.Itoa(i), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			panic(err)
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			panic(err)
+		}
+
+		_, err = io.Copy(out, rc)
+
+		out.Close()
+		rc.Close()
+
+		if err != nil {
+			panic(err)
+		}
+	}
+}`}, 1, gosec.NewConfig()}, {[]string{`
+package main
+
+import (
+	"io"
+	"os"
+)
+
+func main() {
+	s, err := os.Open("src")
+	if err != nil {
+		panic(err)
+	}
+	defer s.Close()
+
+	d, err := os.Create("dst")
+	if err != nil {
+		panic(err)
+	}
+	defer d.Close()
+
+	_, err = io.Copy(d, s)
+	if  err != nil {
+		panic(err)
+	}
+}`}, 0, gosec.NewConfig()},
+	}
+
 	// SampleCodeG201 - SQL injection via format string
 	SampleCodeG201 = []CodeSample{
 		{[]string{`
@@ -544,6 +829,76 @@ func main(){
 		panic(err)
 	}
 	defer rows.Close()
+}`}, 1, gosec.NewConfig()}, {[]string{`
+// Format string without proper quoting case insensitive
+package main
+import (
+	"database/sql"
+	"fmt"
+	"os"
+)
+
+func main(){
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		panic(err)
+	}
+	q := fmt.Sprintf("select * from foo where name = '%s'", os.Args[1])
+	rows, err := db.Query(q)
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+}`}, 1, gosec.NewConfig()}, {[]string{`
+// Format string without proper quoting with context
+package main
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"os"
+)
+
+func main(){
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		panic(err)
+	}
+	q := fmt.Sprintf("select * from foo where name = '%s'", os.Args[1])
+	rows, err := db.QueryContext(context.Background(), q)
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+}`}, 1, gosec.NewConfig()}, {[]string{`
+// Format string without proper quoting with transaction
+package main
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"os"
+)
+
+func main(){
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		panic(err)
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		panic(err)
+	}
+	defer tx.Rollback()
+	q := fmt.Sprintf("select * from foo where name = '%s'", os.Args[1])
+	rows, err := tx.QueryContext(context.Background(), q)
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+	if err := tx.Commit(); err != nil {
+		panic(err)
+	}
 }`}, 1, gosec.NewConfig()}, {[]string{`
 // Format string false positive, safe string spec.
 package main
@@ -630,7 +985,8 @@ import (
 
 func main(){
 	fmt.Sprintln()
-}`}, 0, gosec.NewConfig()}}
+}`}, 0, gosec.NewConfig()},
+	}
 
 	// SampleCodeG202 - SQL query string building via string concatenation
 	SampleCodeG202 = []CodeSample{
@@ -646,6 +1002,84 @@ func main(){
 		panic(err)
 	}
 	rows, err := db.Query("SELECT * FROM foo WHERE name = " + os.Args[1])
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+}`}, 1, gosec.NewConfig()}, {[]string{`
+// case insensitive match
+package main
+import (
+	"database/sql"
+	"os"
+)
+func main(){
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		panic(err)
+	}
+	rows, err := db.Query("select * from foo where name = " + os.Args[1])
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+}`}, 1, gosec.NewConfig()}, {[]string{`
+// context match
+package main
+import (
+    "context"
+	"database/sql"
+	"os"
+)
+func main(){
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		panic(err)
+	}
+	rows, err := db.QueryContext(context.Background(), "select * from foo where name = " + os.Args[1])
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+}`}, 1, gosec.NewConfig()}, {[]string{`
+// DB transaction check
+package main
+import (
+    "context"
+	"database/sql"
+	"os"
+)
+func main(){
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		panic(err)
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		panic(err)
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(context.Background(), "select * from foo where name = " + os.Args[1])
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+	if err := tx.Commit(); err != nil {
+		panic(err)
+	}
+}`}, 1, gosec.NewConfig()}, {[]string{`
+// multiple string concatenation
+package main
+import (
+	"database/sql"
+	"os"
+)
+func main(){
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		panic(err)
+	}
+	rows, err := db.Query("SELECT * FROM foo" + "WHERE name = " + os.Args[1])
 	if err != nil {
 		panic(err)
 	}
@@ -706,7 +1140,8 @@ func main(){
 		}
 		defer rows.Close()
 }
-`}, 0, gosec.NewConfig()}}
+`}, 0, gosec.NewConfig()},
+	}
 
 	// SampleCodeG203 - Template checks
 	SampleCodeG203 = []CodeSample{
@@ -744,7 +1179,8 @@ func main() {
 		"Body":     template.HTML(a),
 	}
 	t.Execute(os.Stdout, v)
-}`}, 1, gosec.NewConfig()}, {[]string{
+}`,
+		}, 1, gosec.NewConfig()}, {[]string{
 			`
 package main
 import (
@@ -760,7 +1196,8 @@ func main() {
 		"Body":     template.JS(a),
 	}
 	t.Execute(os.Stdout, v)
-}`}, 1, gosec.NewConfig()}, {[]string{
+}`,
+		}, 1, gosec.NewConfig()}, {[]string{
 			`
 package main
 import (
@@ -776,12 +1213,13 @@ func main() {
 		"Body":     template.URL(a),
 	}
 	t.Execute(os.Stdout, v)
-}`}, 1, gosec.NewConfig()}}
+}`,
+		}, 1, gosec.NewConfig()},
+	}
 
 	// SampleCodeG204 - Subprocess auditing
-	SampleCodeG204 = []CodeSample{{[]string{`
-// Calling any function which starts a new process
-// with a function call as an argument is considered a command injection
+	SampleCodeG204 = []CodeSample{
+		{[]string{`
 package main
 import (
 	"log"
@@ -789,27 +1227,30 @@ import (
 	"context"
 )
 func main() {
-	err := exec.CommandContext(context.Background(), "sleep", "5").Run()
+	err := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplavel").Run()
  	if err != nil {
 		log.Fatal(err)
 	}
   	log.Printf("Command finished with error: %v", err)
-}`}, 1, gosec.NewConfig()}, {[]string{`
+}`}, 0, gosec.NewConfig()},
+		{[]string{`
 // Calling any function which starts a new process with using
 // command line arguments as it's arguments is considered dangerous
 package main
 import (
+	"context"
 	"log"
 	"os"
 	"os/exec"
 )
 func main() {
-	err := exec.CommandContext(os.Args[0], "sleep", "5").Run()
+	err := exec.CommandContext(context.Background(), os.Args[0], "5").Run()
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Printf("Command finished with error: %v", err)
-}`}, 1, gosec.NewConfig()}, {[]string{`
+}`}, 1, gosec.NewConfig()},
+		{[]string{`
 // Initializing a local variable using a environmental
 // variable is consider as a dangerous user input
 package main
@@ -828,7 +1269,8 @@ func main() {
 	log.Printf("Waiting for command to finish...")
 	err = cmd.Wait()
 	log.Printf("Command finished with error: %v", err)
-}`}, 1, gosec.NewConfig()}, {[]string{`
+}`}, 1, gosec.NewConfig()},
+		{[]string{`
 // gosec doesn't have enough context to decide that the
 // command argument of the RunCmd function is harcoded string
 // and that's why it's better to warn the user so he can audit it
@@ -851,7 +1293,8 @@ func RunCmd(command string) {
 
 func main() {
 	RunCmd("sleep")
-}`}, 1, gosec.NewConfig()}, {[]string{`
+}`}, 1, gosec.NewConfig()},
+		{[]string{`
 // syscall.Exec function called with harcoded arguments
 // shouldn't be consider as a command injection
 package main
@@ -865,6 +1308,46 @@ func main() {
 		fmt.Printf("Error: %v\n", err)
 	}
 }`}, 0, gosec.NewConfig()},
+		{
+			[]string{`
+package main
+
+import (
+	"fmt"
+	"syscall"
+)
+
+func RunCmd(command string) {
+	_, err := syscall.ForkExec(command, []string{}, nil)
+	if err != nil {
+	    fmt.Printf("Error: %v\n", err)
+	}
+}
+
+func main() {
+	RunCmd("sleep")
+}`}, 1, gosec.NewConfig(),
+		},
+		{
+			[]string{`
+package main
+
+import (
+	"fmt"
+	"syscall"
+)
+
+func RunCmd(command string) {
+	_, _, err := syscall.StartProcess(command, []string{}, nil)
+	if err != nil {
+	    fmt.Printf("Error: %v\n", err)
+	}
+}
+
+func main() {
+	RunCmd("sleep")
+}`}, 1, gosec.NewConfig(),
+		},
 		{[]string{`
 // starting a process with a variable as an argument
 // even if not constant is not considered as dangerous
@@ -884,7 +1367,26 @@ func main() {
 	log.Printf("Waiting for command to finish...")
 	err = cmd.Wait()
 	log.Printf("Command finished with error: %v", err)
-}`}, 0, gosec.NewConfig()}}
+}`}, 0, gosec.NewConfig()},
+		{[]string{`
+// exec.Command from supplemental package sys/execabs
+// using variable arguments
+package main
+import (
+	"context"
+	"log"
+	"os"
+	exec "golang.org/x/sys/execabs"
+)
+func main() {
+	err := exec.CommandContext(context.Background(), os.Args[0], "5").Run()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Command finished with error: %v", err)
+}
+`}, 1, gosec.NewConfig()},
+	}
 
 	// SampleCodeG301 - mkdir permission check
 	SampleCodeG301 = []CodeSample{{[]string{`
@@ -1051,6 +1553,30 @@ func main() {
 package main
 
 import (
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+)
+
+func main() {
+	http.HandleFunc("/bar", func(w http.ResponseWriter, r *http.Request) {
+  		title := r.URL.Query().Get("title")
+		f, err := os.OpenFile(title, os.O_RDWR|os.O_CREATE, 0755)
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+		}
+		body := make([]byte, 5)
+		if _, err = f.Read(body); err != nil {
+			fmt.Printf("Error: %v\n", err)
+		}
+		fmt.Fprintf(w, "%s", body)
+	})
+	log.Fatal(http.ListenAndServe(":3000", nil))
+}`}, 1, gosec.NewConfig()}, {[]string{`
+package main
+
+import (
 	"log"
 	"os"
 	"io/ioutil"
@@ -1106,9 +1632,64 @@ func main() {
 		log.Printf("Error: %v\n", err)
 	}
 	log.Print(body)
-}`}, 1, gosec.NewConfig()}}
+}`}, 1, gosec.NewConfig()}, {[]string{`
+package main
 
-	// SampleCodeG305 - File path traversal when extracting zip archives
+import (
+    "os"
+    "path/filepath"
+)
+
+func main() {
+    repoFile := "path_of_file"
+    cleanRepoFile := filepath.Clean(repoFile)
+    _, err := os.OpenFile(cleanRepoFile, os.O_RDONLY, 0600)
+    if err != nil {
+        panic(err)
+    }
+}
+`}, 0, gosec.NewConfig()}, {[]string{`
+package main
+
+import (
+    "os"
+    "path/filepath"
+)
+
+func openFile(filePath string) {
+	_, err := os.OpenFile(filepath.Clean(filePath), os.O_RDONLY, 0600)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func main() {
+    repoFile := "path_of_file"
+	openFile(repoFile)
+}
+`}, 0, gosec.NewConfig()}, {[]string{`
+package main
+
+import (
+    "os"
+    "path/filepath"
+)
+
+func main() {
+    repoFile := "path_of_file"
+	relFile, err := filepath.Rel("./", repoFile)
+	if err != nil {
+		panic(err)
+	}
+    _, err = os.OpenFile(relFile, os.O_RDONLY, 0600)
+    if err != nil {
+        panic(err)
+    }
+}
+
+`}, 0, gosec.NewConfig()}}
+
+	// SampleCodeG305 - File path traversal when extracting zip/tar archives
 	SampleCodeG305 = []CodeSample{{[]string{`
 package unzip
 
@@ -1200,7 +1781,178 @@ func unzip(archive, target string) error {
 	}
 
 	return nil
+}`}, 1, gosec.NewConfig()}, {[]string{`
+package zip
+
+import (
+    "archive/zip"
+    "io"
+    "os"
+    "path"
+)
+
+func extractFile(f *zip.File, destPath string) error {
+    filePath := path.Join(destPath, f.Name)
+    os.MkdirAll(path.Dir(filePath), os.ModePerm)
+
+    rc, err := f.Open()
+    if err != nil {
+        return err
+    }
+    defer rc.Close()
+
+    fw, err := os.Create(filePath)
+    if err != nil {
+        return err
+    }
+    defer fw.Close()
+
+    if _, err = io.Copy(fw, rc); err != nil {
+        return err
+    }
+
+    if f.FileInfo().Mode()&os.ModeSymlink != 0 {
+        return nil
+    }
+
+    if err = os.Chtimes(filePath, f.ModTime(), f.ModTime()); err != nil {
+        return err
+    }
+    return os.Chmod(filePath, f.FileInfo().Mode())
+}`}, 1, gosec.NewConfig()}, {[]string{`
+package tz
+
+import (
+    "archive/tar"
+    "io"
+    "os"
+    "path"
+)
+
+func extractFile(f *tar.Header, tr *tar.Reader, destPath string) error {
+    filePath := path.Join(destPath, f.Name)
+    os.MkdirAll(path.Dir(filePath), os.ModePerm)
+
+    fw, err := os.Create(filePath)
+    if err != nil {
+        return err
+    }
+    defer fw.Close()
+
+    if _, err = io.Copy(fw, tr); err != nil {
+        return err
+    }
+
+    if f.FileInfo().Mode()&os.ModeSymlink != 0 {
+        return nil
+    }
+
+    if err = os.Chtimes(filePath, f.FileInfo().ModTime(), f.FileInfo().ModTime()); err != nil {
+        return err
+    }
+    return os.Chmod(filePath, f.FileInfo().Mode())
 }`}, 1, gosec.NewConfig()}}
+
+	// SampleCodeG306 - Poor permissions for WriteFile
+	SampleCodeG306 = []CodeSample{
+		{[]string{`package main
+
+import (
+	"bufio"
+	"fmt"
+	"io/ioutil"
+	"os"
+)
+
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
+
+func main() {
+
+	d1 := []byte("hello\ngo\n")
+	err := ioutil.WriteFile("/tmp/dat1", d1, 0744)
+	check(err)
+
+	allowed := ioutil.WriteFile("/tmp/dat1", d1, 0600)
+	check(allowed)
+
+	f, err := os.Create("/tmp/dat2")
+	check(err)
+
+	defer f.Close()
+
+	d2 := []byte{115, 111, 109, 101, 10}
+	n2, err := f.Write(d2)
+
+	defer check(err)
+	fmt.Printf("wrote %d bytes\n", n2)
+
+	n3, err := f.WriteString("writes\n")
+	fmt.Printf("wrote %d bytes\n", n3)
+
+	f.Sync()
+
+	w := bufio.NewWriter(f)
+	n4, err := w.WriteString("buffered\n")
+	fmt.Printf("wrote %d bytes\n", n4)
+
+	w.Flush()
+
+}`}, 1, gosec.NewConfig()},
+	}
+	// SampleCodeG307 - Unsafe defer of os.Close
+	SampleCodeG307 = []CodeSample{
+		{[]string{`package main
+
+import (
+	"bufio"
+	"fmt"
+	"io/ioutil"
+	"os"
+)
+
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
+
+func main() {
+
+	d1 := []byte("hello\ngo\n")
+	err := ioutil.WriteFile("/tmp/dat1", d1, 0744)
+	check(err)
+
+	allowed := ioutil.WriteFile("/tmp/dat1", d1, 0600)
+	check(allowed)
+
+	f, err := os.Create("/tmp/dat2")
+	check(err)
+
+	defer f.Close()
+
+	d2 := []byte{115, 111, 109, 101, 10}
+	n2, err := f.Write(d2)
+
+	defer check(err)
+	fmt.Printf("wrote %d bytes\n", n2)
+
+	n3, err := f.WriteString("writes\n")
+	fmt.Printf("wrote %d bytes\n", n3)
+
+	f.Sync()
+
+	w := bufio.NewWriter(f)
+	n4, err := w.WriteString("buffered\n")
+	fmt.Printf("wrote %d bytes\n", n4)
+
+	w.Flush()
+
+}`}, 1, gosec.NewConfig()},
+	}
 
 	// SampleCodeG401 - Use of weak crypto MD5
 	SampleCodeG401 = []CodeSample{
@@ -1213,6 +1965,7 @@ import (
 	"log"
 	"os"
 )
+
 func main() {
 	f, err := os.Open("file.txt")
 	if err != nil {
@@ -1220,12 +1973,20 @@ func main() {
 	}
 	defer f.Close()
 
+	defer func() {
+	  err := f.Close()
+	  if err != nil {
+		 log.Printf("error closing the file: %s", err)
+	  }
+	}()
+
 	h := md5.New()
 	if _, err := io.Copy(h, f); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Printf("%x", h.Sum(nil))
-}`}, 1, gosec.NewConfig()}}
+}`}, 1, gosec.NewConfig()},
+	}
 
 	// SampleCodeG401b - Use of weak crypto SHA1
 	SampleCodeG401b = []CodeSample{
@@ -1250,7 +2011,8 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Printf("%x", h.Sum(nil))
-}`}, 1, gosec.NewConfig()}}
+}`}, 1, gosec.NewConfig()},
+	}
 
 	// SampleCodeG402 - TLS settings
 	SampleCodeG402 = []CodeSample{{[]string{`
@@ -1289,7 +2051,8 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-}`}, 1, gosec.NewConfig()}, {[]string{`
+}`,
+	}, 1, gosec.NewConfig()}, {[]string{`
 // Insecure max version
 package main
 import (
@@ -1328,7 +2091,42 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-}`}, 1, gosec.NewConfig()}}
+}`}, 1, gosec.NewConfig(),
+	}, {[]string{`
+// secure max version when min version is specified
+package main
+import (
+	"crypto/tls"
+	"fmt"
+	"net/http"
+)
+func main() {
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{MaxVersion: 0, MinVersion: tls.VersionTLS13},
+	}
+	client := &http.Client{Transport: tr}
+	_, err := client.Get("https://golang.org/")
+	if err != nil {
+		fmt.Println(err)
+	}
+}`}, 0, gosec.NewConfig()}, {[]string{`
+package p0
+
+import "crypto/tls"
+
+func TlsConfig0() *tls.Config {
+	var v uint16 = 0
+	return &tls.Config{MinVersion: v}
+}
+`, `
+package p0
+
+import "crypto/tls"
+
+func TlsConfig1() *tls.Config {
+   return &tls.Config{MinVersion: 0x0304}
+}
+`}, 1, gosec.NewConfig()}}
 
 	// SampleCodeG403 - weak key strength
 	SampleCodeG403 = []CodeSample{
@@ -1346,7 +2144,8 @@ func main() {
 		fmt.Println(err)
 	}
 	fmt.Println(pvk)
-}`}, 1, gosec.NewConfig()}}
+}`}, 1, gosec.NewConfig()},
+	}
 
 	// SampleCodeG404 - weak random number
 	SampleCodeG404 = []CodeSample{
@@ -1356,13 +2155,15 @@ import "crypto/rand"
 func main() {
 	good, _ := rand.Read(nil)
 	println(good)
-}`}, 0, gosec.NewConfig()}, {[]string{`
+}`}, 0, gosec.NewConfig()},
+		{[]string{`
 package main
 import "math/rand"
 func main() {
 	bad := rand.Int()
 	println(bad)
-}`}, 1, gosec.NewConfig()}, {[]string{`
+}`}, 1, gosec.NewConfig()},
+		{[]string{`
 package main
 import (
 	"crypto/rand"
@@ -1371,11 +2172,31 @@ import (
 func main() {
 	good, _ := rand.Read(nil)
 	println(good)
-	i := mrand.Int31()
-	println(i)
-}`}, 0, gosec.NewConfig()}}
+	bad := mrand.Int31()
+	println(bad)
+}`}, 1, gosec.NewConfig()},
+		{[]string{`
+package main
+import (
+	"math/rand"
+)
+func main() {
+	gen := rand.New(rand.NewSource(10))
+	bad := gen.Int()
+	println(bad)
+}`}, 1, gosec.NewConfig()},
+		{[]string{`
+package main
+import (
+	"math/rand"
+)
+func main() {
+	bad := rand.Intn(10)
+	println(bad)
+}`}, 1, gosec.NewConfig()},
+	}
 
-	// SampleCodeG501 - Blacklisted import MD5
+	// SampleCodeG501 - Blocklisted import MD5
 	SampleCodeG501 = []CodeSample{
 		{[]string{`
 package main
@@ -1388,9 +2209,10 @@ func main() {
 	for _, arg := range os.Args {
 		fmt.Printf("%x - %s\n", md5.Sum([]byte(arg)), arg)
 	}
-}`}, 1, gosec.NewConfig()}}
+}`}, 1, gosec.NewConfig()},
+	}
 
-	// SampleCodeG502 - Blacklisted import DES
+	// SampleCodeG502 - Blocklisted import DES
 	SampleCodeG502 = []CodeSample{
 		{[]string{`
 package main
@@ -1416,9 +2238,10 @@ func main() {
 	stream := cipher.NewCFBEncrypter(block, iv)
 	stream.XORKeyStream(ciphertext[des.BlockSize:], plaintext)
 	fmt.Println("Secret message is: %s", hex.EncodeToString(ciphertext))
-}`}, 1, gosec.NewConfig()}}
+}`}, 1, gosec.NewConfig()},
+	}
 
-	// SampleCodeG503 - Blacklisted import RC4
+	// SampleCodeG503 - Blocklisted import RC4
 	SampleCodeG503 = []CodeSample{{[]string{`
 package main
 import (
@@ -1437,7 +2260,7 @@ func main() {
 	fmt.Println("Secret message is: %s", hex.EncodeToString(ciphertext))
 }`}, 1, gosec.NewConfig()}}
 
-	// SampleCodeG504 - Blacklisted import CGI
+	// SampleCodeG504 - Blocklisted import CGI
 	SampleCodeG504 = []CodeSample{{[]string{`
 package main
 import (
@@ -1447,7 +2270,7 @@ import (
 func main() {
 	cgi.Serve(http.FileServer(http.Dir("/usr/share/doc")))
 }`}, 1, gosec.NewConfig()}}
-	// SampleCodeG505 - Blacklisted import SHA1
+	// SampleCodeG505 - Blocklisted import SHA1
 	SampleCodeG505 = []CodeSample{
 		{[]string{`
 package main
@@ -1460,13 +2283,112 @@ func main() {
 	for _, arg := range os.Args {
 		fmt.Printf("%x - %s\n", sha1.Sum([]byte(arg)), arg)
 	}
-}`}, 1, gosec.NewConfig()}}
-	// SampleCode601 - Go build tags
-	SampleCode601 = []CodeSample{{[]string{`
-// +build tag
+}`}, 1, gosec.NewConfig()},
+	}
 
+	// SampleCodeG601 - Implicit aliasing over range statement
+	SampleCodeG601 = []CodeSample{
+		{[]string{
+			`
+package main
+
+import "fmt"
+
+var vector []*string
+func appendVector(s *string) {
+	vector = append(vector, s)
+}
+
+func printVector() {
+	for _, item := range vector {
+		fmt.Printf("%s", *item)
+	}
+	fmt.Println()
+}
+
+func foo() (int, **string, *string) {
+	for _, item := range vector {
+		return 0, &item, item
+	}
+	return 0, nil, nil
+}
+
+func main() {
+	for _, item := range []string{"A", "B", "C"} {
+		appendVector(&item)
+	}
+
+	printVector()
+
+	zero, c_star, c := foo()
+	fmt.Printf("%d %v %s", zero, c_star, c)
+}`,
+		}, 1, gosec.NewConfig()},
+		{[]string{`
+// see: github.com/securego/gosec/issues/475
+package main
+import (
+    "fmt"
+)
+func main() {
+    sampleMap := map[string]string{}
+    sampleString := "A string"
+    for sampleString, _ = range sampleMap {
+        fmt.Println(sampleString)
+    }
+}`}, 0, gosec.NewConfig()},
+	}
+
+	// SampleCodeBuildTag - G601 build tags
+	SampleCodeBuildTag = []CodeSample{{[]string{`
+// +build tag
 package main
 func main() {
   fmt.Println("no package imported error")
 }`}, 1, gosec.NewConfig()}}
+
+	// SampleCodeCgo - Cgo file sample
+	SampleCodeCgo = []CodeSample{{[]string{`
+package main
+
+import (
+        "fmt"
+        "unsafe"
+)
+
+/*
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+int printData(unsigned char *data) {
+    return printf("cData: %lu \"%s\"\n", (long unsigned int)strlen(data), data);
+}
+*/
+import "C"
+
+func main() {
+        // Allocate C data buffer.
+        width, height := 8, 2
+        lenData := width * height
+        // add string terminating null byte
+        cData := (*C.uchar)(C.calloc(C.size_t(lenData+1), C.sizeof_uchar))
+
+        // When no longer in use, free C allocations.
+        defer C.free(unsafe.Pointer(cData))
+
+        // Go slice reference to C data buffer,
+        // minus string terminating null byte
+        gData := (*[1 << 30]byte)(unsafe.Pointer(cData))[:lenData:lenData]
+
+        // Write and read cData via gData.
+        for i := range gData {
+                gData[i] = '.'
+        }
+        copy(gData[0:], "Data")
+        gData[len(gData)-1] = 'X'
+        fmt.Printf("gData: %d %q\n", len(gData), gData)
+        C.printData(cData)
+}
+`}, 0, gosec.NewConfig()}}
 )
